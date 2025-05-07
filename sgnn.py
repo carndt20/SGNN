@@ -12,32 +12,39 @@ class MultiHeadAttention(nn.Module):
         self.num_heads = num_heads
         self.hidden_channels = hidden_channels
         
+        # Ensure hidden_channels is divisible by num_heads
+        assert hidden_channels % num_heads == 0, "hidden_channels must be divisible by num_heads"
+        
         self.query = nn.Linear(hidden_channels, hidden_channels)
         self.key = nn.Linear(hidden_channels, hidden_channels)
         self.value = nn.Linear(hidden_channels, hidden_channels)
         
         self.proj = nn.Linear(hidden_channels, hidden_channels)
+        self.dropout = nn.Dropout(0.1)
         
     def forward(self, x):
+        # x shape: [num_nodes, hidden_channels]
         batch_size = x.size(0)
         
-        # Linear projections and reshape for multi-head attention
-        q = self.query(x).view(batch_size, -1, self.num_heads, self.hidden_channels // self.num_heads)
-        k = self.key(x).view(batch_size, -1, self.num_heads, self.hidden_channels // self.num_heads)
-        v = self.value(x).view(batch_size, -1, self.num_heads, self.hidden_channels // self.num_heads)
+        # Linear projections
+        q = self.query(x)  # [num_nodes, hidden_channels]
+        k = self.key(x)    # [num_nodes, hidden_channels]
+        v = self.value(x)  # [num_nodes, hidden_channels]
         
-        # Transpose for attention computation
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
+        # Reshape for multi-head attention
+        head_dim = self.hidden_channels // self.num_heads
+        q = q.view(batch_size, self.num_heads, head_dim)  # [num_nodes, num_heads, head_dim]
+        k = k.view(batch_size, self.num_heads, head_dim)  # [num_nodes, num_heads, head_dim]
+        v = v.view(batch_size, self.num_heads, head_dim)  # [num_nodes, num_heads, head_dim]
         
         # Scaled dot-product attention
-        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.hidden_channels // self.num_heads)
+        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(head_dim)
         attn = F.softmax(scores, dim=-1)
+        attn = self.dropout(attn)
         
         # Apply attention to values
-        out = torch.matmul(attn, v)
-        out = out.transpose(1, 2).contiguous().view(batch_size, -1, self.hidden_channels)
+        out = torch.matmul(attn, v)  # [num_nodes, num_heads, head_dim]
+        out = out.view(batch_size, -1)  # [num_nodes, hidden_channels]
         
         # Final projection
         out = self.proj(out)
@@ -47,28 +54,39 @@ class SGNN(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, dropout=0.5, num_heads=4):
         super(SGNN, self).__init__()
         
+        # Ensure hidden_channels is divisible by num_heads
+        hidden_channels = (hidden_channels // num_heads) * num_heads
+        
         # Transaction network (GAT layers)
-        self.trans_conv1 = GATConv(in_channels, hidden_channels, heads=num_heads, concat=True)
-        self.trans_bn1 = nn.BatchNorm1d(hidden_channels * num_heads)
-        self.trans_conv2 = GATConv(hidden_channels * num_heads, hidden_channels, heads=1, concat=False)
-        self.trans_bn2 = nn.BatchNorm1d(hidden_channels)
+        self.trans_conv1 = GATConv(in_channels, hidden_channels // num_heads, heads=num_heads, concat=True)
+        self.trans_bn1 = nn.BatchNorm1d(hidden_channels)
+        self.trans_conv2 = GATConv(hidden_channels, hidden_channels // num_heads, heads=1, concat=False)
+        self.trans_bn2 = nn.BatchNorm1d(hidden_channels // num_heads)
         
         # Identity network (GCN layers for structural features)
-        self.ident_conv1 = GCNConv(in_channels, hidden_channels)
-        self.ident_bn1 = nn.BatchNorm1d(hidden_channels)
-        self.ident_conv2 = GCNConv(hidden_channels, hidden_channels)
-        self.ident_bn2 = nn.BatchNorm1d(hidden_channels)
+        self.ident_conv1 = GCNConv(in_channels, hidden_channels // num_heads)
+        self.ident_bn1 = nn.BatchNorm1d(hidden_channels // num_heads)
+        self.ident_conv2 = GCNConv(hidden_channels // num_heads, hidden_channels // num_heads)
+        self.ident_bn2 = nn.BatchNorm1d(hidden_channels // num_heads)
+        
+        # Feature fusion layer
+        self.fusion = nn.Sequential(
+            nn.Linear(hidden_channels // num_heads * 2, hidden_channels // num_heads),
+            nn.BatchNorm1d(hidden_channels // num_heads),
+            nn.ELU(),
+            nn.Dropout(dropout)
+        )
         
         # Attention fusion
-        self.attention = MultiHeadAttention(hidden_channels, num_heads=num_heads)
+        self.attention = MultiHeadAttention(hidden_channels // num_heads, num_heads=num_heads)
         
         # Classification layers
         self.classifier = nn.Sequential(
-            nn.Linear(hidden_channels * 2, hidden_channels),
-            nn.BatchNorm1d(hidden_channels),
+            nn.Linear(hidden_channels // num_heads, hidden_channels // num_heads),
+            nn.BatchNorm1d(hidden_channels // num_heads),
             nn.ELU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_channels, out_channels)
+            nn.Linear(hidden_channels // num_heads, out_channels)
         )
         
         # Initialize weights
@@ -113,14 +131,17 @@ class SGNN(nn.Module):
         # Combine features
         combined_x = torch.cat([trans_x, ident_x], dim=1)
         
+        # Fuse features
+        fused_x = self.fusion(combined_x)
+        
         # Apply self-attention
-        attn_x = self.attention(combined_x)
+        attn_x = self.attention(fused_x)
         
         # Final classification
         x = self.classifier(attn_x)
         
         # Stable log softmax with temperature scaling
-        temperature = 1.0
+        temperature = 0.5  # Reduced temperature for sharper predictions
         x = x / temperature
         return F.log_softmax(x, dim=1)
 

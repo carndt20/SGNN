@@ -9,7 +9,11 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from elliptic_loader import EllipticLoader
 from sgnn import SGNN
 import warnings
-warnings.filterwarnings('ignore')
+import os
+from numpy._core.multiarray import scalar
+
+# Add safe globals for PyTorch 2.6
+torch.serialization.add_safe_globals([scalar, np.dtype])
 
 def calculate_class_weights(labels):
     """Calculate class weights with smoothing and maximum weight limit."""
@@ -214,7 +218,7 @@ def main():
                 break
     
     # Load best model
-    checkpoint = torch.load('best_model.pt')
+    checkpoint = torch.load('best_model.pt', weights_only=False)
     model.load_state_dict(checkpoint['model_state_dict'])
     best_threshold = checkpoint['threshold']
     
