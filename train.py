@@ -11,6 +11,10 @@ from sgnn import SGNN
 import warnings
 import os
 from numpy._core.multiarray import scalar
+import matplotlib.pyplot as plt
+from torch_geometric.utils import to_networkx
+import networkx as nx
+import random
 
 # Add safe globals for PyTorch 2.6
 torch.serialization.add_safe_globals([scalar, np.dtype])
@@ -133,6 +137,31 @@ def test(model, data, device, threshold=None):
         
         return accuracy, precision, recall, f1, class_metrics, cm, threshold
 
+def visualize_graph(data, predictions, max_nodes=500):
+    G = to_networkx(data.cpu(), to_undirected=True)
+    # Sample a subgraph if too large
+    if G.number_of_nodes() > max_nodes:
+        sampled_nodes = random.sample(list(G.nodes()), max_nodes)
+        G = G.subgraph(sampled_nodes)
+        predictions = {n: predictions[n] for n in G.nodes()}
+    else:
+        predictions = {n: predictions[n] for n in G.nodes()}
+
+    plt.figure(figsize=(12, 12))
+    color_map = ['red' if predictions[n] == 1 else 'blue' for n in G.nodes()]
+    nx.draw_networkx(
+        G,
+        node_color=color_map,
+        node_size=20,
+        with_labels=False,
+        edge_color='gray',
+        alpha=0.3,
+        pos=nx.spring_layout(G, seed=42)  # deterministic layout for subgraph
+    )
+    plt.title("Account Graph with Model Predictions (Red: Illicit, Blue: Licit)")
+    plt.axis('off')
+    plt.show()
+
 def main():
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -240,6 +269,13 @@ def main():
         print(f'  Precision: {metrics["precision"]:.4f}')
         print(f'  Recall: {metrics["recall"]:.4f}')
         print(f'  F1: {metrics["f1"]:.4f}')
+
+    # Visualize the graph with predictions
+    model.eval()
+    with torch.no_grad():
+        output = model(data)
+        predictions = output.argmax(dim=1).cpu().numpy()
+    visualize_graph(data, predictions)
 
 if __name__ == '__main__':
     main() 
