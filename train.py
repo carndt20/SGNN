@@ -139,6 +139,11 @@ def test(model, data, device, threshold=None):
 
 def visualize_graph(data, predictions, max_nodes=500):
     G = to_networkx(data.cpu(), to_undirected=True)
+    # Focus on the largest connected component
+    if not nx.is_connected(G):
+        largest_cc = max(nx.connected_components(G), key=len)
+        G = G.subgraph(largest_cc).copy()
+        predictions = {n: predictions[n] for n in G.nodes()}
     # Sample a subgraph if too large
     if G.number_of_nodes() > max_nodes:
         sampled_nodes = random.sample(list(G.nodes()), max_nodes)
@@ -147,17 +152,11 @@ def visualize_graph(data, predictions, max_nodes=500):
     else:
         predictions = {n: predictions[n] for n in G.nodes()}
 
-    plt.figure(figsize=(12, 12))
+    plt.figure(figsize=(8, 8))
+    pos = nx.kamada_kawai_layout(G)
+    nx.draw_networkx_edges(G, pos, alpha=0.9, width=1.2, edge_color='gray')
     color_map = ['red' if predictions[n] == 1 else 'blue' for n in G.nodes()]
-    nx.draw_networkx(
-        G,
-        node_color=color_map,
-        node_size=20,
-        with_labels=False,
-        edge_color='gray',
-        alpha=0.3,
-        pos=nx.spring_layout(G, seed=42)  # deterministic layout for subgraph
-    )
+    nx.draw_networkx_nodes(G, pos, node_color=color_map, node_size=30, alpha=0.8)
     plt.title("Account Graph with Model Predictions (Red: Illicit, Blue: Licit)")
     plt.axis('off')
     plt.show()
