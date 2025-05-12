@@ -3,3 +3,8 @@
 *.json
 /data/
 *.npz
+
+.venv/
+__pycache__/
+*.pyc
+*.pyo
