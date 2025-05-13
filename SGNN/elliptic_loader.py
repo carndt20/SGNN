@@ -6,7 +6,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 
 class EllipticLoader:
-    def __init__(self, data_dir='elliptic++'):
+    def __init__(self, data_dir='data'):
         self.data_dir = data_dir
         self.features = None
         self.edges = None
