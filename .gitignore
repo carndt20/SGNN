@@ -46,3 +46,8 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db 
+
+
+echo "data/json/*.json" >> .gitignore
+git add .gitignore
+git commit -m "Ignore large JSON files"
