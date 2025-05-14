@@ -13,6 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.append(project_root)
 
 from utils.file_utils import absolute_path
+from utils.config_utils import get_config
 
 def fix_malformed_json(line):
     """
@@ -176,9 +177,10 @@ def json2csv(json_path, csv_path, is_input=True):
     print(f"\nSaved to {csv_path}")
 
 def get_received_value():
-    df = pd.read_csv('../../data/process/output_recevied_value.csv')
+    config = get_config('path')
+    df = pd.read_csv(absolute_path(config['file']['out_value']))
     # No need to replace brackets anymore as we're handling the data properly
-    df.to_csv('../../data/process/output_recevied_value.csv', index=False)
+    df.to_csv(absolute_path(config['file']['out_value']), index=False)
 
 if __name__ == '__main__':
     # Process input addresses

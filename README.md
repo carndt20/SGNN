@@ -44,3 +44,33 @@ python train\train_address.py
 ```
 If you want to modify the model parameters or run other ablation models, the relevant parameters in `.config/` need to be modified.
 
+## Testing Mode
+
+The preprocessing script `process_tx.py` includes a testing mode that allows you to process a smaller subset of transactions for faster testing and debugging. This is particularly useful when you want to verify the preprocessing pipeline without processing the entire dataset.
+
+### How to Use Testing Mode
+
+1. Open `dataloader/preprocess/process_tx.py`
+2. At the bottom of the file, you'll find these settings:
+```python
+if __name__ == '__main__':
+    # Set test_mode to True to process only a small subset of transactions
+    test_mode = True
+    test_size = 100  # Number of transactions to process in test mode
+```
+
+3. To enable/disable testing mode:
+   - Set `test_mode = True` to process only a subset of transactions
+   - Set `test_mode = False` to process the entire dataset
+4. You can adjust `test_size` to control how many transactions to process in test mode
+
+### What Testing Mode Does
+
+When enabled, testing mode:
+- Processes only the specified number of transactions
+- Filters all data files to maintain consistency
+- Prints the number of transactions being processed
+- Maintains all relationships between transactions, addresses, and features
+
+This makes it much faster to test changes to the preprocessing pipeline while ensuring data consistency.
+
