@@ -5,6 +5,7 @@ import numpy as np
 from tqdm import tqdm
 import os
 import psutil
+import argparse
 
 from utils.config_utils import get_config
 from utils.file_utils import absolute_path
@@ -25,7 +26,7 @@ def process_in_chunks(file_path, chunk_size=50000):
     chunks = pd.read_csv(absolute_path(file_path), chunksize=chunk_size)
     return chunks
 
-def get_address_feature_with_tx_feature_repeat():
+def get_address_feature_with_tx_feature_repeat(test_mode=False, test_size=1000):
     print("Processing address features with transaction features...")
     print(f"Current memory usage: {get_memory_usage():.2f} GB")
     
@@ -35,6 +36,11 @@ def get_address_feature_with_tx_feature_repeat():
     print("Reading address features...")
     addr_features = pd.read_csv(absolute_path(config['file']['addr_features']))
     addr_features = addr_features.drop(columns=['Time step']).drop_duplicates()
+    
+    if test_mode:
+        print(f"Test mode: Using {test_size} addresses")
+        addr_features = addr_features.head(test_size)
+    
     print(f"Address features shape: {addr_features.shape}")
     print(f"Memory usage after reading address features: {get_memory_usage():.2f} GB")
     
@@ -44,6 +50,10 @@ def get_address_feature_with_tx_feature_repeat():
     txAddr = pd.read_csv(absolute_path(config['file']['txAddr']))
     addrTx.columns = ['address', 'txId']
     txAddr.columns = ['txId', 'address']
+    
+    if test_mode:
+        addrTx = addrTx[addrTx['address'].isin(addr_features['address'])]
+        txAddr = txAddr[txAddr['address'].isin(addr_features['address'])]
     
     # Combine address-transaction mappings
     print("Combining address-transaction mappings...")
@@ -64,6 +74,8 @@ def get_address_feature_with_tx_feature_repeat():
     tx_features_chunks = process_in_chunks(config['file']['txs_features'])
     
     for chunk in tqdm(tx_features_chunks, desc="Processing chunks"):
+        if test_mode:
+            chunk = chunk[chunk['txId'].isin(addr_features_all['txId'])]
         merged_chunk = pd.merge(addr_features_all, chunk, on='txId')
         if not merged_chunk.empty:
             output_chunks.append(merged_chunk)
@@ -88,7 +100,7 @@ def get_address_feature_with_tx_feature_repeat():
     print("Done!")
     print(f"Final memory usage: {get_memory_usage():.2f} GB")
 
-def get_addr_feature_with_tx_feature_mean():
+def get_addr_feature_with_tx_feature_mean(test_mode=False, test_size=1000):
     print("Calculating mean features...")
     print(f"Current memory usage: {get_memory_usage():.2f} GB")
     
@@ -99,6 +111,8 @@ def get_addr_feature_with_tx_feature_mean():
     mean_chunks = []
     
     for chunk in tqdm(chunks, desc="Calculating means"):
+        if test_mode:
+            chunk = chunk.head(test_size)
         chunk = chunk.drop('txId', axis=1)
         mean_chunk = chunk.groupby(['address', 'Time step']).mean().reset_index()
         mean_chunks.append(mean_chunk)
@@ -125,7 +139,7 @@ def get_addr_feature_with_tx_feature_mean():
     print("Done!")
     print(f"Final memory usage: {get_memory_usage():.2f} GB")
 
-def get_address_edge_new():
+def get_address_edge_new(test_mode=False, test_size=1000):
     print("Processing address edges...")
     print(f"Current memory usage: {get_memory_usage():.2f} GB")
     
@@ -136,6 +150,12 @@ def get_address_edge_new():
     addrTx = pd.read_csv(absolute_path(config['file']['addrTx']))
     txAddr = pd.read_csv(absolute_path(config['file']['txAddr']))
     addr_edges = pd.read_csv(absolute_path(config['file']['addr_edges']))
+    
+    if test_mode:
+        print(f"Test mode: Using {test_size} edges")
+        addrTx = addrTx.head(test_size)
+        txAddr = txAddr.head(test_size)
+        addr_edges = addr_edges.head(test_size)
     
     # Process in chunks
     print("Merging edge data...")
@@ -150,10 +170,15 @@ def get_address_edge_new():
     print(f"Final memory usage: {get_memory_usage():.2f} GB")
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Process address data')
+    parser.add_argument('--test', action='store_true', help='Run in test mode')
+    parser.add_argument('test_size', type=int, nargs='?', default=1000, help='Number of transactions to process in test mode')
+    args = parser.parse_args()
+    
     # First get address features with transaction features
-    get_address_feature_with_tx_feature_repeat()
+    get_address_feature_with_tx_feature_repeat(args.test, args.test_size)
     # Then calculate mean features
-    get_addr_feature_with_tx_feature_mean()
+    get_addr_feature_with_tx_feature_mean(args.test, args.test_size)
     # Finally process edges
-    get_address_edge_new()
+    get_address_edge_new(args.test, args.test_size)
 

@@ -42,40 +42,16 @@ def get_tx_edge_feature_by_tx(test_mode=False, test_size=100):
     
     print("Reading transaction features...")
     tx_feature_df = pd.read_csv(absolute_path(config['file']['txs_features']))
+    
+    # Filter features to match the transactions in classes
     tx_feature_df = tx_feature_df[tx_feature_df['txId'].isin(test_txs)]
-    print(f"Features shape: {tx_feature_df.shape}")
     
-    print("Reading transaction edges...")
-    tx_edge_df = pd.read_csv(absolute_path(config['file']['txs_edges']))
-    tx_edge_df = tx_edge_df[tx_edge_df['txId1'].isin(test_txs) & tx_edge_df['txId2'].isin(test_txs)]
-    print(f"Edges shape: {tx_edge_df.shape}")
+    # Ensure the order matches the classes
+    tx_feature_df = tx_feature_df.set_index('txId').reindex(tx_class_df['txId']).reset_index()
     
-    print("Reading transaction hashes...")
-    txId2hash = pd.read_csv(absolute_path(config['file']['txId2hash']))
-    txId2hash = txId2hash[txId2hash['txId'].isin(test_txs)]
-    print(f"Hash mapping shape: {txId2hash.shape}")
-    
-    print("Reading transaction timestamps...")
-    tx_time_df = pd.read_csv(absolute_path(config['file']['txs_time']))
-    print(f"Time data shape: {tx_time_df.shape}")
-    
-    # Merge hashes with timestamps
-    print("Merging transaction data...")
-    # First merge txId2hash with tx_time_df
-    tx_time_df = pd.merge(txId2hash, tx_time_df, how='left', on='txhash')
-    print(f"After first merge shape: {tx_time_df.shape}")
-    print("Columns in tx_time_df:", tx_time_df.columns.tolist())
-    
-    # Then merge with features
-    tx_feature_df = pd.merge(tx_time_df, tx_feature_df, on='txId')
-    print(f"After second merge shape: {tx_feature_df.shape}")
-    
-    assert tx_feature_df.shape[0] == tx_time_df.shape[0], 'Some txs do not have timestamp!'
-    
-    print("Saving processed files...")
-    tx_time_df.to_csv(absolute_path(config['file']['txs_time_new']), index=False)
+    # Save the filtered features
     tx_feature_df.to_csv(absolute_path(config['file']['txs_features_new']), index=False)
-    tx_edge_df.to_csv(absolute_path(config['file']['txs_edges_new']), index=False)
+    print(f"Saved {len(tx_feature_df)} transaction features")
 
 
 def tx_indegree(test_mode=False, test_size=100):
