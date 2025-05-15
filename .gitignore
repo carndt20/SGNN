@@ -1,7 +1,8 @@
 .idea
 *.csv
 *.json
-/data/
+/data/*
+!/data/data.md
 *.npz
 
 .venv/
